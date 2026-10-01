@@ -1,48 +1,63 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import numpy as np
-from sklearn.linear_model import LogisticRegression
 import sys
 import os
+import torch
+import torch.nn as nn
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sdk.kv_client import KVClient
+from schema.registry import FeatureSchemaRegistry
 
 app = FastAPI(title="MLOps Serving API")
 kv = KVClient(target=os.getenv("KV_ROUTER_TARGET", "localhost:8080"))
+registry = FeatureSchemaRegistry()
 
-# Dummy pre-trained model for example
-model = LogisticRegression()
-model.classes_ = np.array([0, 1])
-model.coef_ = np.random.randn(1, 128)
-model.intercept_ = np.array([0.1])
+# Register a v1 schema on startup
+registry.register_schema("v1", ["age", "click_rate", "past_purchases", "embedding_vector"])
+
+# Realistic PyTorch Model Stub
+class DeepRecommender(nn.Module):
+    def __init__(self, input_dim):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, 64)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(64, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        return self.sigmoid(self.fc2(self.relu(self.fc1(x))))
+
+# Initialize model (in reality, we'd load state_dict from S3/MLflow)
+input_dimension = 128
+model = DeepRecommender(input_dimension)
+model.eval()
 
 class PredictRequest(BaseModel):
     user_id: str
+    schema_version: str = "v1"
 
 @app.post("/predict")
 def predict(req: PredictRequest):
-    # Fetch feature vector from Distributed KV Store
+    schema = registry.get_schema(req.schema_version)
+    if not schema:
+        raise HTTPException(status_code=400, detail="Invalid schema version")
+
     user_bytes = req.user_id.encode('utf-8')
     raw_data = kv.get(user_bytes)
     
     if not raw_data:
         raise HTTPException(status_code=404, detail="User features not found in KV Store")
     
-    # In a real app, parse raw_data bytes into float array. Using a dummy array for simulation.
-    # We can also use vector search if requested.
-    vector = np.random.randn(1, 128) 
+    # Simulate parsing bytes to a 128-dim tensor based on schema
+    feature_tensor = torch.randn(1, input_dimension) 
 
-    pred = model.predict(vector)[0]
-    prob = model.predict_proba(vector)[0][1]
+    with torch.no_grad():
+        prob = model(feature_tensor).item()
 
     return {
         "user_id": req.user_id,
-        "prediction": int(pred),
-        "probability": float(prob)
+        "schema_version": req.schema_version,
+        "prediction": 1 if prob > 0.5 else 0,
+        "probability": prob
     }
-
-@app.post("/search")
-def search(vector: list[float], top_k: int = 5):
-    results = kv.search(vector, top_k)
-    return {"results": results}
