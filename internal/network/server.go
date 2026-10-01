@@ -79,7 +79,7 @@ func (s *StorageServer) Heartbeat(ctx context.Context, req *pb.HeartbeatRequest)
 }
 
 func (s *StorageServer) Sync(ctx context.Context, req *pb.SyncRequest) (*pb.SyncResponse, error) {
-	keys, err := s.engine.ScanSince(req.SinceTimestamp)
+	keys, err := s.engine.ScanSince(0)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to scan: %v", err)
 	}

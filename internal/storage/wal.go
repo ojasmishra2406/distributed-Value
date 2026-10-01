@@ -2,7 +2,7 @@ package storage
 
 import (
 	"encoding/binary"
-	"errors"
+	
 	"hash/crc32"
 	"io"
 	"os"

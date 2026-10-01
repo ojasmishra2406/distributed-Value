@@ -1,9 +1,9 @@
 package storage
 
 import (
-	"encoding/binary"
+	
 	"fmt"
-	"io"
+	
 	"os"
 	"path/filepath"
 	"sync"
@@ -189,4 +189,12 @@ func (e *StorageEngine) ScanSince(sinceTs int64) ([][]byte, error) {
 	}
 	
 	return keys, nil
+}
+
+// ApplyReplication applies a replicated write to the storage engine
+func (e *StorageEngine) ApplyReplication(key, value []byte, timestamp int64, tombstone bool) error {
+	if tombstone {
+		return e.Delete(key, timestamp)
+	}
+	return e.Put(key, value, timestamp, nil)
 }
