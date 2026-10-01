@@ -1,0 +1,82 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ebs-sc
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kv-node-svc
+  labels: { app: kv-node }
+spec:
+  clusterIP: None
+  selector: { app: kv-node }
+  ports: [{ port: 50051, name: grpc }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kv-node
+spec:
+  serviceName: "kv-node-svc"
+  replicas: 3
+  selector:
+    matchLabels: { app: kv-node }
+  template:
+    metadata:
+      labels: { app: kv-node }
+    spec:
+      serviceAccountName: kv-s3-backup-sa
+      containers:
+      - name: kv-node
+        image: account-id.dkr.ecr.region.amazonaws.com/kv-node:latest
+        ports: [{ containerPort: 50051, name: grpc }]
+        env:
+        - name: PEERS
+          value: "kv-node-0.kv-node-svc,kv-node-1.kv-node-svc,kv-node-2.kv-node-svc"
+        - name: DATA_DIR
+          value: "/data"
+        volumeMounts: [{ name: data, mountPath: /data }]
+  volumeClaimTemplates:
+  - metadata: { name: data }
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "ebs-sc"
+      resources: { requests: { storage: 100Gi } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kv-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: kv-gateway }
+  template:
+    metadata:
+      labels: { app: kv-gateway }
+    spec:
+      containers:
+      - name: kv-gateway
+        image: account-id.dkr.ecr.region.amazonaws.com/kv-gateway:latest
+        ports: [{ containerPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kv-gateway-nlb
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+spec:
+  type: LoadBalancer
+  selector: { app: kv-gateway }
+  ports: [{ port: 80, targetPort: 8080, protocol: TCP }]
