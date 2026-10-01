@@ -1,0 +1,73 @@
+syntax = "proto3";
+package kv;
+option go_package = "github.com/mishr/distributed-kv/api/proto";
+
+message PutRequest {
+  bytes key = 1;
+  bytes value = 2;
+  int64 timestamp = 3;
+  repeated float vector = 4;
+}
+
+message PutResponse {}
+
+message GetRequest {
+  bytes key = 1;
+}
+
+message GetResponse {
+  bytes value = 1;
+  bool found = 2;
+  bool tombstone = 3;
+  int64 timestamp = 4;
+}
+
+message DeleteRequest {
+  bytes key = 1;
+  int64 timestamp = 2;
+}
+
+message DeleteResponse {}
+
+message SearchRequest {
+  repeated float vector = 1;
+  int32 top_k = 2;
+}
+
+message Record {
+  bytes key = 1;
+  bytes value = 2;
+  int64 timestamp = 3;
+  bool tombstone = 4;
+  repeated float vector = 5;
+}
+
+message SearchResponse {
+  repeated Record records = 1;
+}
+
+message HeartbeatRequest {
+  string node_id = 1;
+}
+
+message HeartbeatResponse {
+  bool alive = 1;
+}
+
+message SyncRequest {
+  int64 min_timestamp = 1;
+}
+
+message SyncResponse {
+  repeated Record records = 1;
+}
+
+service KVService {
+  rpc Put(PutRequest) returns (PutResponse);
+  rpc StreamPut(stream PutRequest) returns (PutResponse);
+  rpc Get(GetRequest) returns (GetResponse);
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc Sync(SyncRequest) returns (SyncResponse);
+}

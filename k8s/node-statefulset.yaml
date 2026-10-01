@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kv-node
+spec:
+  serviceName: kv-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kv-node
+  template:
+    metadata:
+      labels:
+        app: kv-node
+    spec:
+      serviceAccountName: kv-s3-sa
+      containers:
+      - name: kv-node
+        image: distributed-kv:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/node"]
+        env:
+        - name: PEERS
+          value: "kv-node-0.kv-headless,kv-node-1.kv-headless,kv-node-2.kv-headless"
+        - name: BUCKET_NAME
+          value: "my-kv-backup-bucket"
+        ports:
+        - containerPort: 50051
+          name: grpc
+        volumeMounts:
+        - name: data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: ebs-sc
+      resources:
+        requests:
+          storage: 100Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kv-headless
+spec:
+  clusterIP: None
+  selector:
+    app: kv-node
+  ports:
+  - port: 50051
+    name: grpc
