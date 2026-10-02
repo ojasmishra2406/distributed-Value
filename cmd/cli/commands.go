@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	pb "github.com/mishr/distributed-kv/api/proto"
+	pb "github.com/ojasmishra2406/distributed-Value/api/proto"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

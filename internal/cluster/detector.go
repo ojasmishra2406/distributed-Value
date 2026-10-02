@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	pb "github.com/mishr/distributed-kv/api/proto"
+	pb "github.com/ojasmishra2406/distributed-Value/api/proto"
 )
 
 type NodeStatus string

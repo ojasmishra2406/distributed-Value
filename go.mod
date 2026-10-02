@@ -1,4 +1,4 @@
-module github.com/mishr/distributed-kv
+module github.com/ojasmishra2406/distributed-Value
 
 go 1.22
 
