@@ -1,9 +1,7 @@
 package storage
 
 import (
-	
 	"fmt"
-	
 	"os"
 	"path/filepath"
 	"sync"
@@ -22,7 +20,7 @@ type StorageEngine struct {
 	nextTableID uint64
 	flushSem    chan struct{}
 	closeCh     chan struct{}
-	hnsw        *HNSW
+	vectorIndex        *FlatVectorIndex
 }
 
 func NewStorageEngine(dir string) (*StorageEngine, error) {
@@ -42,7 +40,7 @@ func NewStorageEngine(dir string) (*StorageEngine, error) {
 		activeWAL: wal,
 		flushSem:  make(chan struct{}, 1),
 		closeCh:   make(chan struct{}),
-		hnsw:      NewHNSW(),
+		vectorIndex:      NewFlatVectorIndex(dir),
 	}
 
 	if err := wal.Recover(mem); err != nil {
@@ -79,7 +77,7 @@ func (e *StorageEngine) Put(key, value []byte, timestamp int64, vector []float32
 	}
 
 	if len(vector) > 0 {
-		e.hnsw.Insert(string(key), key, value, vector)
+		e.vectorIndex.Insert(string(key), key, value, vector)
 	}
 
 	return e.activeMem.Put(key, value, timestamp)
@@ -128,7 +126,7 @@ func (e *StorageEngine) Get(key []byte) ([]byte, bool, int64, bool, error) {
 }
 
 func (e *StorageEngine) Search(vector []float32, topK int) []*VectorNode {
-	return e.hnsw.Search(vector, topK)
+	return e.vectorIndex.Search(vector, topK)
 }
 
 func (e *StorageEngine) triggerFlush() {
@@ -152,8 +150,59 @@ func (e *StorageEngine) flush(mem *Memtable, tableID uint64) {
 		e.mu.Lock()
 		e.sstables = append(e.sstables, sst)
 		e.immutable = e.immutable[1:]
+		if len(e.sstables) >= 4 {
+			go e.Compact()
+		}
 		e.mu.Unlock()
 	}
+}
+
+// Compact triggers a merge of all SSTables
+func (e *StorageEngine) Compact() error {
+	e.mu.Lock()
+	if len(e.sstables) < 2 {
+		e.mu.Unlock()
+		return nil
+	}
+	tablesToCompact := e.sstables
+	e.sstables = nil
+	e.mu.Unlock()
+
+	// Merge tablesToCompact (simplified: we'll load them all into a new memtable for ease)
+	// In a real LSM, this would be a k-way merge iterator.
+	mergedMem := NewMemtable()
+	for _, sst := range tablesToCompact {
+		// we don't have a full iterator in SSTable yet, so we'll simulate by loading from ScanSince
+		keys, err := sst.ScanSince(0)
+		if err == nil {
+			for _, k := range keys {
+				val, tomb, ts, found, _ := sst.Get(k)
+				if found {
+					if tomb {
+						mergedMem.Delete(k, ts)
+					} else {
+						mergedMem.Put(k, val, ts)
+					}
+				}
+			}
+		}
+		sst.file.Close()
+		os.Remove(sst.file.Name())
+	}
+
+	e.mu.Lock()
+	e.nextTableID++
+	newID := e.nextTableID
+	e.mu.Unlock()
+
+	newSst, err := FlushMemtableToSSTable(mergedMem, e.dir, newID)
+	if err == nil {
+		e.mu.Lock()
+		e.sstables = append([]*SSTable{newSst}, e.sstables...)
+		e.mu.Unlock()
+	}
+
+	return err
 }
 
 func (e *StorageEngine) ScanSince(sinceTs int64) ([][]byte, error) {
@@ -191,7 +240,6 @@ func (e *StorageEngine) ScanSince(sinceTs int64) ([][]byte, error) {
 	return keys, nil
 }
 
-// ApplyReplication applies a replicated write to the storage engine
 func (e *StorageEngine) ApplyReplication(key, value []byte, timestamp int64, tombstone bool) error {
 	if tombstone {
 		return e.Delete(key, timestamp)

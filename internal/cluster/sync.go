@@ -3,8 +3,8 @@ package cluster
 import (
 	"context"
 
-	pb "github.com/mishr/distributed-kv/api/proto"
-	"github.com/mishr/distributed-kv/internal/storage"
+	pb "github.com/ojasmishra2406/distributed-Value/api/proto"
+	"github.com/ojasmishra2406/distributed-Value/internal/storage"
 )
 
 type NodeSynchronizer struct {

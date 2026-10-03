@@ -7,9 +7,9 @@ import (
 	"net"
 	"os"
 
-	pb "github.com/mishr/distributed-kv/api/proto"
-	"github.com/mishr/distributed-kv/internal/network"
-	"github.com/mishr/distributed-kv/internal/storage"
+	pb "github.com/ojasmishra2406/distributed-Value/api/proto"
+	"github.com/ojasmishra2406/distributed-Value/internal/network"
+	"github.com/ojasmishra2406/distributed-Value/internal/storage"
 	"google.golang.org/grpc"
 )
 
