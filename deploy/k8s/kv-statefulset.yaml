@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kv-service
+spec:
+  ports:
+  - port: 50051
+    name: grpc
+  clusterIP: None
+  selector:
+    app: kv-node
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kv-node
+spec:
+  serviceName: "kv-service"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kv-node
+  template:
+    metadata:
+      labels:
+        app: kv-node
+    spec:
+      containers:
+      - name: kv-node
+        image: kv-node:latest
+        imagePullPolicy: IfNotPresent
+        args: ["-port=50051", "-dir=/data"]
+        ports:
+        - containerPort: 50051
+          name: grpc
+        volumeMounts:
+        - name: data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi

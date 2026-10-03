@@ -158,5 +158,5 @@ var statusCmd = &cobra.Command{
 }
 
 func init() {
-	putCmd.Flags().String("vector", "", "Comma-separated floats for HNSW vector")
+	putCmd.Flags().String("vector", "", "Comma-separated floats for FlatVectorIndex vector")
 }

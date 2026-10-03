@@ -1,0 +1,3 @@
+PUT new_val (Node 1,2): err=<nil>
+GET key_repair (Triggers Read Repair): new_val, err: <nil>
+Done

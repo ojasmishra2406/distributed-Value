@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -104,6 +105,7 @@ func (fd *FailureDetector) pingNode(node string) {
 		fd.missedBeats[node]++
 		if fd.missedBeats[node] >= fd.maxMisses && status == StatusAlive {
 			fd.statuses[node] = StatusDead
+			log.Printf("FailureDetector: node %s marked DEAD after missed beats", node)
 		}
 	} else {
 		fd.missedBeats[node] = 0
