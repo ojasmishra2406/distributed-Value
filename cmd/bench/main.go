@@ -14,8 +14,8 @@ func main() {
 	if err != nil { panic(err) }
 	defer conn.Close()
 	client := pb.NewKVServiceClient(conn)
-	numRequests := 1000
-	concurrency := 20
+	numRequests := 10000
+	concurrency := 200
 	fmt.Printf("Starting Benchmark: %d requests, %d concurrent workers\n", numRequests, concurrency)
 	start := time.Now()
 	var wg sync.WaitGroup

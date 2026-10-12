@@ -1,0 +1,11 @@
+ml_env/
+__pycache__/
+*.wal
+data*/
+bench_data*/
+test_vector_batch_db*/
+node.log
+node.exe
+kind.exe
+kubectl.exe
+*.exe

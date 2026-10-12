@@ -68,7 +68,7 @@ func TestBloomFilter_FalsePositiveRate(t *testing.T) {
 func TestEngine_Compaction(t *testing.T) {
 	dir := t.TempDir()
 	eng, _ := NewStorageEngine(dir)
-	defer func() { eng.activeWAL.file.Close(); for _, s := range eng.sstables { s.file.Close() } }()
+	defer func() { eng.activeWAL.file.Close(); if eng.vectorIndex != nil && eng.vectorIndex.file != nil { eng.vectorIndex.file.Close() }; for _, s := range eng.sstables { s.file.Close() } }()
 	eng.Put([]byte("k1"), []byte("v1"), 1, nil)
 	eng.triggerFlush()
 	time.Sleep(10*time.Millisecond)
@@ -83,4 +83,76 @@ func TestEngine_Compaction(t *testing.T) {
 	time.Sleep(50*time.Millisecond) // Let compaction finish
 	val, _, _, found, _ := eng.Get([]byte("k1"))
 	if !found || string(val) != "v1" { t.Fatalf("Compaction lost data") }
+}
+
+
+func TestEngine_PutBatch_LastWriteWins(t *testing.T) {
+	dir := "test_putbatch_last_write"
+	os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
+
+	engine, err := NewStorageEngine(dir)
+	if err != nil {
+		t.Fatalf("Failed to create engine: %v", err)
+	}
+	defer func() { engine.closeCh <- struct{}{} }()
+
+	entries := []Entry{
+		{Key: []byte("k1"), Value: []byte("v1"), Timestamp: 1},
+		{Key: []byte("k1"), Value: []byte("v2"), Timestamp: 2},
+	}
+
+	err = engine.PutBatch(entries)
+	if err != nil {
+		t.Fatalf("PutBatch failed: %v", err)
+	}
+
+	val, _, _, found, err := engine.Get([]byte("k1"))
+	if err != nil || !found {
+		t.Fatalf("Failed to get k1: found=%v, err=%v", found, err)
+	}
+
+	if string(val) != "v2" {
+		t.Fatalf("Expected v2, got %s", string(val))
+	}
+}
+
+
+func TestVector_InsertBatch_LastWriteWins(t *testing.T) {
+	dir := "test_vector_lww_db"
+	os.RemoveAll(dir)
+	os.MkdirAll(dir, 0755)
+	defer os.RemoveAll(dir)
+
+	idx := NewFlatVectorIndex(dir)
+	
+	v1 := []float32{1.0, 0.0, 0.0}
+	v2 := []float32{0.0, 1.0, 0.0}
+	
+	batch := []*VectorNode{
+		{ID: "vec_1", Key: []byte("vec_1"), Value: []byte("val"), Vector: v1},
+		{ID: "vec_1", Key: []byte("vec_1"), Value: []byte("val"), Vector: v2},
+	}
+	
+	idx.InsertBatch(batch)
+	
+	idx.mu.RLock()
+	node := idx.nodes["vec_1"]
+	idx.mu.RUnlock()
+	
+	if node.Vector[0] != 0.0 || node.Vector[1] != 1.0 {
+		t.Fatalf("Memory state did not respect last-write-wins: %v", node.Vector)
+	}
+
+	idx2 := NewFlatVectorIndex(dir)
+	idx2.mu.RLock()
+	node2 := idx2.nodes["vec_1"]
+	idx2.mu.RUnlock()
+	
+	if node2 == nil {
+		t.Fatalf("Vector not recovered from disk")
+	}
+	if node2.Vector[0] != 0.0 || node2.Vector[1] != 1.0 {
+		t.Fatalf("Disk state did not respect last-write-wins: %v", node2.Vector)
+	}
 }
